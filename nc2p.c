@@ -34,6 +34,7 @@ struct client_connection
     int socket;
     struct curl_response resp;
     int err;
+    struct sockaddr_in client_addr;
 };
 
 size_t curl_read_cb(char* buffer, size_t size, size_t nitems, void* user)
@@ -79,19 +80,24 @@ size_t curl_write_cb(void* data, size_t size, size_t nitems, void* user)
 void* thread(void* arg)
 {
     struct client_connection* cc = (struct client_connection*) arg;
+    char xff[100];
+    snprintf(xff, sizeof(xff), "X-Forwarded-For: %s", inet_ntoa(cc->client_addr.sin_addr));
 
     CURL* curl = curl_easy_init();
+    struct curl_slist* headers = curl_slist_append(NULL, xff);
     curl_mime* mime = curl_mime_init(curl);
     curl_mimepart* part = curl_mime_addpart(mime);
     curl_mime_name(part, cc->form_field);
     curl_mime_filename(part, cc->filename);
     curl_mime_data_cb(part, -1, curl_read_cb, NULL, NULL, cc); // -1 -> chunked
     curl_easy_setopt(curl, CURLOPT_URL, cc->upstream);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, cc);
     CURLcode curl_res = curl_easy_perform(curl);
     curl_mime_free(mime);
+    curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
     int sent;
@@ -188,36 +194,39 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    curl_global_init(CURL_GLOBAL_ALL);
+
     while (1)
     {
-        int client_sock = accept(server_socket, NULL, NULL);
-        if (client_sock == -1)
+        struct client_connection* cc = malloc(sizeof(*cc));
+        memset(cc, 0, sizeof(*cc));
+        cc->upstream = arg_upstream_url;
+        cc->form_field = arg_form_field;
+        cc->filename = arg_filename;
+
+        socklen_t addrlen = sizeof(cc->client_addr);
+        cc->socket = accept(server_socket, (struct sockaddr*)&cc->client_addr, &addrlen);
+        if (cc->socket == -1)
         {
             fprintf(stderr, "accept() failed: %s\n", strerror(errno));
             continue;
         }
         if (arg_timeout != 0)
         {
-            if (setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1
-                || setsockopt(client_sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) == -1)
+            if (setsockopt(cc->socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) == -1
+                || setsockopt(cc->socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) == -1)
             {
                 fprintf(stderr, "Setting SO_RCVTIMEO or SO_SNDTIMEO using setsockopt() failed: %s\n", strerror(errno));
-                close(client_sock);
+                close(cc->socket);
                 continue;
             }
         }
-        struct client_connection* cc = malloc(sizeof(*cc));
-        memset(cc, 0, sizeof(*cc));
-        cc->socket = client_sock;
-        cc->upstream = arg_upstream_url;
-        cc->form_field = arg_form_field;
-        cc->filename = arg_filename;
 
         pthread_t t;
         if (pthread_create(&t, NULL, thread, cc) != 0)
         {
             fprintf(stderr, "pthread_create() failed\n");
-            close(client_sock);
+            close(cc->socket);
             continue;
         }
         pthread_detach(t);
