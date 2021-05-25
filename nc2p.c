@@ -198,8 +198,7 @@ int main(int argc, char* argv[])
 
     while (1)
     {
-        struct client_connection* cc = malloc(sizeof(*cc));
-        memset(cc, 0, sizeof(*cc));
+        struct client_connection* cc = calloc(1, sizeof(*cc));
         cc->upstream = arg_upstream_url;
         cc->form_field = arg_form_field;
         cc->filename = arg_filename;
@@ -209,6 +208,7 @@ int main(int argc, char* argv[])
         if (cc->socket == -1)
         {
             fprintf(stderr, "accept() failed: %s\n", strerror(errno));
+            free(cc);
             continue;
         }
         if (arg_timeout != 0)
@@ -218,6 +218,7 @@ int main(int argc, char* argv[])
             {
                 fprintf(stderr, "Setting SO_RCVTIMEO or SO_SNDTIMEO using setsockopt() failed: %s\n", strerror(errno));
                 close(cc->socket);
+                free(cc);
                 continue;
             }
         }
@@ -227,6 +228,7 @@ int main(int argc, char* argv[])
         {
             fprintf(stderr, "pthread_create() failed\n");
             close(cc->socket);
+            free(cc);
             continue;
         }
         pthread_detach(t);
