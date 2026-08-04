@@ -103,9 +103,31 @@ void* thread(void* arg)
     snprintf(xff, sizeof(xff), "X-Forwarded-For: %s", addr_str);
 
     CURL* curl = curl_easy_init();
+    if (!curl) {
+        cc->err = ENOMEM;
+        goto send_error;
+    }
     struct curl_slist* headers = curl_slist_append(NULL, xff);
+    if (!headers) {
+        cc->err = ENOMEM;
+        curl_easy_cleanup(curl);
+        goto send_error;
+    }
     curl_mime* mime = curl_mime_init(curl);
+    if (!mime) {
+        cc->err = ENOMEM;
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        goto send_error;
+    }
     curl_mimepart* part = curl_mime_addpart(mime);
+    if (!part) {
+        cc->err = ENOMEM;
+        curl_mime_free(mime);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        goto send_error;
+    }
     curl_mime_name(part, cc->form_field);
     curl_mime_filename(part, cc->filename);
     curl_mime_data_cb(part, -1, curl_read_cb, NULL, NULL, cc); // -1 -> chunked
@@ -123,25 +145,30 @@ void* thread(void* arg)
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
-    int sent;
-    if (curl_res != CURLE_OK)
+    if (curl_res != CURLE_OK) {
+        goto send_error;
+    }
+
+    int sent = send(cc->socket, cc->resp.data, cc->resp.size, 0);
+    if (sent == -1) {
+        printf("Error send()ing reply: %s\n", strerror(errno));
+    }
+    goto cleanup;
+
+send_error:
     {
         const char* curl_err = "Error POSTing to upstream server";
         if (cc->err == EWOULDBLOCK && !ALLOW_TIMEOUT)
         {
             curl_err = "Error: Receive Timout. Consider using `netcat -N` or something equivalent.";
         }
-        sent = send(cc->socket, curl_err, strlen(curl_err)+1, 0);
-    }
-    else
-    {
-        sent = send(cc->socket, cc->resp.data, cc->resp.size, 0);
-    }
-    if (sent == -1)
-    {
-        printf("Error send()ing reply: %s\n", strerror(errno));
+        int sent = send(cc->socket, curl_err, strlen(curl_err)+1, 0);
+        if (sent == -1) {
+            printf("Error send()ing reply: %s\n", strerror(errno));
+        }
     }
 
+cleanup:
     close(cc->socket);
     free(cc->resp.data);
     free(cc);
