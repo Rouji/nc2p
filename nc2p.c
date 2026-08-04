@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <signal.h>
 #include <pthread.h>
 #include <curl/curl.h>
 #include <sys/socket.h>
@@ -20,6 +21,12 @@
 #define DEFAULT_FORM_FIELD "file"
 #define DEFAULT_FILENAME "file"
 #define MAX_RESPONSE_SIZE (100 * 1024 * 1024) // 100 MB
+
+static volatile sig_atomic_t running = 1;
+static void handle_signal(int sig) {
+    (void)sig;
+    running = 0;
+}
 
 struct curl_response
 {
@@ -263,8 +270,13 @@ int main(int argc, char* argv[])
     }
 
     curl_global_init(CURL_GLOBAL_ALL);
+    atexit(curl_global_cleanup);
 
-    while (1)
+    signal(SIGINT, handle_signal);
+    signal(SIGTERM, handle_signal);
+    signal(SIGPIPE, SIG_IGN);
+
+    while (running)
     {
         struct client_connection* cc = calloc(1, sizeof(*cc));
         cc->upstream = arg_upstream_url;
