@@ -40,6 +40,10 @@ struct client_connection
 size_t curl_read_cb(char* buffer, size_t size, size_t nitems, void* user)
 {
     struct client_connection* cc = (struct client_connection*)user;
+    if (size > 0 && nitems > SIZE_MAX / size) {
+        cc->err = E2BIG;
+        return CURL_READFUNC_ABORT;
+    }
     size_t realsize = size * nitems;
     int ret = recv(cc->socket, buffer, realsize, 0);
     if (ret == -1)
@@ -58,9 +62,17 @@ size_t curl_read_cb(char* buffer, size_t size, size_t nitems, void* user)
 size_t curl_write_cb(void* data, size_t size, size_t nitems, void* user)
 {
     struct client_connection* cc = (struct client_connection*)user;
+    if (size > 0 && nitems > SIZE_MAX / size) {
+        cc->err = E2BIG;
+        return 0;
+    }
     size_t realsize = size * nitems;
     if (realsize == 0)
     {
+        return 0;
+    }
+    if (realsize > SIZE_MAX - cc->resp.size - 1) {
+        cc->err = E2BIG;
         return 0;
     }
     void* new = realloc(cc->resp.data, cc->resp.size + realsize + 1);
