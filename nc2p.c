@@ -19,6 +19,7 @@
 #define DEFAULT_TIMEOUT 10
 #define DEFAULT_FORM_FIELD "file"
 #define DEFAULT_FILENAME "file"
+#define MAX_RESPONSE_SIZE (100 * 1024 * 1024) // 100 MB
 
 struct curl_response
 {
@@ -72,6 +73,10 @@ size_t curl_write_cb(void* data, size_t size, size_t nitems, void* user)
         return 0;
     }
     if (realsize > SIZE_MAX - cc->resp.size - 1) {
+        cc->err = E2BIG;
+        return 0;
+    }
+    if (cc->resp.size + realsize > MAX_RESPONSE_SIZE) {
         cc->err = E2BIG;
         return 0;
     }
