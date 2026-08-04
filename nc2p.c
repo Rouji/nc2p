@@ -11,10 +11,6 @@
 #include <string.h>
 #include <errno.h>
 
-//set this to 1 to behave like termbin.com, which treats receive timeout
-//like a completed upload
-#define ALLOW_TIMEOUT 0
-
 #define DEFAULT_PORT 9999
 #define DEFAULT_LISTEN_IP "0.0.0.0"
 #define DEFAULT_TIMEOUT 10
@@ -57,6 +53,7 @@ struct client_connection
     const char* upstream;
     const char* form_field;
     const char* filename;
+    int allow_timeout;
     int socket;
     struct curl_response resp;
     int err;
@@ -74,7 +71,7 @@ size_t curl_read_cb(char* buffer, size_t size, size_t nitems, void* user)
     int ret = recv(cc->socket, buffer, realsize, 0);
     if (ret == -1)
     {
-        if (errno == EWOULDBLOCK && ALLOW_TIMEOUT)
+        if (errno == EWOULDBLOCK && cc->allow_timeout)
         {
             return 0;
         }
@@ -182,7 +179,7 @@ void* thread(void* arg)
 send_error:
     {
         const char* curl_err = "Error POSTing to upstream server";
-        if (cc->err == EWOULDBLOCK && !ALLOW_TIMEOUT)
+        if (cc->err == EWOULDBLOCK && !cc->allow_timeout)
         {
             curl_err = "Error: Receive Timout. Consider using `netcat -N` or something equivalent.";
         }
@@ -201,7 +198,7 @@ cleanup:
 
 void print_usage(const char* arg0)
 {
-    printf("Usage: %s [-l listen_ip] [-p listen_port] [-t connection_timeout] [-f form_field] [-n filename] upstream_url\n", arg0);
+    printf("Usage: %s [-l listen_ip] [-p listen_port] [-t connection_timeout] [-f form_field] [-n filename] [-T] upstream_url\n", arg0);
 }
 
 int main(int argc, char* argv[])
@@ -209,11 +206,12 @@ int main(int argc, char* argv[])
     const char* arg_listen_ip = DEFAULT_LISTEN_IP;
     int arg_port = DEFAULT_PORT;
     int arg_timeout = DEFAULT_TIMEOUT;
+    int arg_allow_timeout = 0;
     const char* arg_upstream_url;
     const char* arg_form_field = DEFAULT_FORM_FIELD;
     const char* arg_filename = DEFAULT_FILENAME;
     int opt;
-    while ((opt = getopt(argc, argv, "l:p:t:f:n:")) != -1)
+    while ((opt = getopt(argc, argv, "l:p:t:f:n:T")) != -1)
     {
         switch (opt)
         {
@@ -240,6 +238,7 @@ int main(int argc, char* argv[])
             }
             case 'f': arg_form_field = optarg; break;
             case 'n': arg_filename = optarg; break;
+            case 'T': arg_allow_timeout = 1; break;
             default:
                 print_usage(argv[0]);
                 return 1;
@@ -313,6 +312,7 @@ int main(int argc, char* argv[])
         cc->upstream = arg_upstream_url;
         cc->form_field = arg_form_field;
         cc->filename = arg_filename;
+        cc->allow_timeout = arg_allow_timeout;
 
         socklen_t addrlen = sizeof(cc->client_addr);
         cc->socket = accept(server_socket, (struct sockaddr*)&cc->client_addr, &addrlen);
