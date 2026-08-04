@@ -81,7 +81,9 @@ void* thread(void* arg)
 {
     struct client_connection* cc = (struct client_connection*) arg;
     char xff[100];
-    snprintf(xff, sizeof(xff), "X-Forwarded-For: %s", inet_ntoa(cc->client_addr.sin_addr));
+    char addr_str[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &cc->client_addr.sin_addr, addr_str, INET_ADDRSTRLEN);
+    snprintf(xff, sizeof(xff), "X-Forwarded-For: %s", addr_str);
 
     CURL* curl = curl_easy_init();
     struct curl_slist* headers = curl_slist_append(NULL, xff);
