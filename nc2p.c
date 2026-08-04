@@ -165,6 +165,8 @@ void* thread(void* arg)
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
     curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
     CURLcode curl_res = curl_easy_perform(curl);
     curl_mime_free(mime);
     curl_slist_free_all(headers);
@@ -294,6 +296,10 @@ int main(int argc, char* argv[])
     while (running)
     {
         struct client_connection* cc = calloc(1, sizeof(*cc));
+        if (!cc) {
+            perror("calloc");
+            continue;
+        }
         cc->upstream = arg_upstream_url;
         cc->form_field = arg_form_field;
         cc->filename = arg_filename;
