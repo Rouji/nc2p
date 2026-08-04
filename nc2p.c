@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <signal.h>
+#include <stdint.h>
 #include <pthread.h>
 #include <curl/curl.h>
 #include <sys/socket.h>
