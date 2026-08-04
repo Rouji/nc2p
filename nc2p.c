@@ -194,8 +194,26 @@ int main(int argc, char* argv[])
         switch (opt)
         {
             case 'l': arg_listen_ip = optarg; break;
-            case 'p': arg_port = atoi(optarg); break;
-            case 't': arg_timeout = atoi(optarg); break;
+            case 'p': {
+                char* end;
+                long port = strtol(optarg, &end, 10);
+                if (*end != '\0' || port < 1 || port > 65535) {
+                    fprintf(stderr, "Invalid port: %s\n", optarg);
+                    return 1;
+                }
+                arg_port = (int)port;
+                break;
+            }
+            case 't': {
+                char* end;
+                long timeout = strtol(optarg, &end, 10);
+                if (*end != '\0' || timeout < 0) {
+                    fprintf(stderr, "Invalid timeout: %s\n", optarg);
+                    return 1;
+                }
+                arg_timeout = (int)timeout;
+                break;
+            }
             case 'f': arg_form_field = optarg; break;
             case 'n': arg_filename = optarg; break;
             default:
