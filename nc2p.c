@@ -21,12 +21,16 @@
 #define DEFAULT_FORM_FIELD "file"
 #define DEFAULT_FILENAME "file"
 #define MAX_RESPONSE_SIZE (100 * 1024 * 1024) // 100 MB
+#define MAX_CONNECTIONS 1024
 
 static volatile sig_atomic_t running = 1;
 static void handle_signal(int sig) {
     (void)sig;
     running = 0;
 }
+
+static pthread_mutex_t conn_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int active_connections = 0;
 
 struct curl_response
 {
@@ -179,6 +183,9 @@ cleanup:
     close(cc->socket);
     free(cc->resp.data);
     free(cc);
+    pthread_mutex_lock(&conn_mutex);
+    active_connections--;
+    pthread_mutex_unlock(&conn_mutex);
     return 0;
 }
 
@@ -304,9 +311,23 @@ int main(int argc, char* argv[])
         }
 
         pthread_t t;
+        pthread_mutex_lock(&conn_mutex);
+        if (active_connections >= MAX_CONNECTIONS) {
+            pthread_mutex_unlock(&conn_mutex);
+            fprintf(stderr, "Too many connections (max %d)\n", MAX_CONNECTIONS);
+            close(cc->socket);
+            free(cc);
+            continue;
+        }
+        active_connections++;
+        pthread_mutex_unlock(&conn_mutex);
+
         if (pthread_create(&t, NULL, thread, cc) != 0)
         {
-            fprintf(stderr, "pthread_create() failed\n");
+            pthread_mutex_lock(&conn_mutex);
+            active_connections--;
+            pthread_mutex_unlock(&conn_mutex);
+            fprintf(stderr, "pthread_create() failed: %s\n", strerror(errno));
             close(cc->socket);
             free(cc);
             continue;
