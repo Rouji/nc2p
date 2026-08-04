@@ -32,6 +32,20 @@ static void handle_signal(int sig) {
 static pthread_mutex_t conn_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int active_connections = 0;
 
+static void send_all(int sock, const void* buf, size_t len) {
+    size_t total = 0;
+    while (total < len) {
+        ssize_t n = send(sock, (const char*)buf + total, len - total, 0);
+        if (n <= 0) {
+            if (n == -1) {
+                printf("Error send()ing reply: %s\n", strerror(errno));
+            }
+            return;
+        }
+        total += n;
+    }
+}
+
 struct curl_response
 {
     char* data;
@@ -160,10 +174,7 @@ void* thread(void* arg)
         goto send_error;
     }
 
-    int sent = send(cc->socket, cc->resp.data, cc->resp.size, 0);
-    if (sent == -1) {
-        printf("Error send()ing reply: %s\n", strerror(errno));
-    }
+    send_all(cc->socket, cc->resp.data, cc->resp.size);
     goto cleanup;
 
 send_error:
@@ -173,10 +184,7 @@ send_error:
         {
             curl_err = "Error: Receive Timout. Consider using `netcat -N` or something equivalent.";
         }
-        int sent = send(cc->socket, curl_err, strlen(curl_err)+1, 0);
-        if (sent == -1) {
-            printf("Error send()ing reply: %s\n", strerror(errno));
-        }
+        send_all(cc->socket, curl_err, strlen(curl_err));
     }
 
 cleanup:
