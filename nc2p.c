@@ -252,9 +252,19 @@ int main(int argc, char* argv[])
     }
     arg_upstream_url = argv[optind];
 
+    // Validate upstream URL scheme (only allow http/https)
+    if (strncmp(arg_upstream_url, "http://", 7) != 0 &&
+        strncmp(arg_upstream_url, "https://", 8) != 0) {
+        fprintf(stderr, "Upstream URL must use http:// or https:// scheme\n");
+        return 1;
+    }
+
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(arg_listen_ip);
+    if (inet_pton(AF_INET, arg_listen_ip, &server_addr.sin_addr) != 1) {
+        fprintf(stderr, "Invalid listen IP: %s\n", arg_listen_ip);
+        return 1;
+    }
     server_addr.sin_port = htons(arg_port);
     const struct timeval timeout = {arg_timeout, 0};
 
