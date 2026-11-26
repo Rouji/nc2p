@@ -21,3 +21,13 @@ That's mostly fine for smaller files and especially text, but kind of bad for an
 
 `nc2p` will by default (compile-time switch, see `ALLOW_TIMEOUT`) cancel the HTTP POST to upstream, if a client times out. That does mean you might have to add `-N` to your `netcat` command. `nc2p` will (try to) tell clients about that when they time out.
 
+# Docker
+A fully static binary in a `FROM scratch` image (~1.2 MB, only the binary + CA certs):
+```bash
+docker build -t nc2p .
+docker run -d -p 9999:9999 nc2p https://example.com/upload.php
+```
+The image contains no shell, no libc (musl is statically linked), nothing else.  
+CA certs are baked in at `/etc/ssl/certs/ca-certificates.crt`, which is the compile-time curl default
+
+

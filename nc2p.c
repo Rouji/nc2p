@@ -206,7 +206,7 @@ int main(int argc, char* argv[])
 {
     const char* arg_listen_ip = DEFAULT_LISTEN_IP;
     int arg_port = DEFAULT_PORT;
-    int arg_timeout = DEFAULT_TIMEOUT;
+    long arg_timeout = DEFAULT_TIMEOUT;
     int arg_allow_timeout = 0;
     const char* arg_upstream_url;
     const char* arg_form_field = DEFAULT_FORM_FIELD;
@@ -234,7 +234,7 @@ int main(int argc, char* argv[])
                     fprintf(stderr, "Invalid timeout: %s\n", optarg);
                     return 1;
                 }
-                arg_timeout = (int)timeout;
+                arg_timeout = timeout;
                 break;
             }
             case 'f': arg_form_field = optarg; break;
